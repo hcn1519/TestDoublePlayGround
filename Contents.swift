@@ -26,11 +26,11 @@ enum StubTest {
         Subscription.Worker.update(request: successRequest, completion: { result in
             switch result {
             case .success(let response):
-                XCTAssert(response.subscribed == true)
-                XCTAssert(response.subscriptionCount == 27038)
+                assert(response.subscribed == true)
+                assert(response.subscriptionCount == 27038)
                 print("\(#function) success")
-            case .failure(let error):
-                XCTAssert(false, "Result should succeed \(error.localizedDescription)")
+            case .failure:
+                assertionFailure()
             }
         })
     }
@@ -51,16 +51,16 @@ enum StubTest {
 
         Subscription.Worker.update(request: request, completion: { result in
             switch result {
-            case .success(let response):
-                XCTAssert(false, "Result should fail \(response)")
+            case .success:
+                assertionFailure()
             case .failure(let error):
                 if let stubError = error as? Stub.Error {
                     switch stubError {
                     case .statusCode(let code):
-                        XCTAssert(code == 404)
+                        assert(code == 404)
                         print("\(#function) success")
                     default:
-                        XCTAssert(false, "UnExpected Error \(stubError)")
+                        assertionFailure()
                     }
                 }
             }
@@ -68,5 +68,82 @@ enum StubTest {
     }
 }
 
+enum SpyTest {
+
+    static func testRealDOCFlight() {
+        let flights: [Flight] = [Flight(number: 1),
+                                 Flight(number: 2),
+                                 Flight(number: 3),
+                                 Flight(number: 4)]
+
+        var airPort = Airport(flights: flights, controlTower: ControlTower())
+
+        // exercise
+        airPort.removeFlight(number: 3)
+        airPort.addFlights([.init(number: 5)])
+
+        // verify
+        assert(airPort.flights.count == 4)
+        assert(airPort.hasFlight(number: 3) == false)
+        assert(airPort.hasFlight(number: 5) == true)
+
+        let removeNotification = airPort.controlTower.notifications.first
+        assert(removeNotification?.actionCode == "remove(number:)")
+        
+        print("\(#function) success")
+    }
+
+    static func testSpyFlight() {
+        let flights: [Flight] = [Flight(number: 1),
+                                 Flight(number: 2),
+                                 Flight(number: 3),
+                                 Flight(number: 4)]
+
+        let controlTowerSpy = ControlTowerSpy()
+        var airPort = Airport(flights: flights, controlTower: controlTowerSpy)
+
+        // exercise
+        airPort.removeFlight(number: 3)
+        airPort.addFlights([.init(number: 5)])
+
+        // verify
+        assert(airPort.flights.count == 4)
+        assert(airPort.hasFlight(number: 3) == false)
+        assert(airPort.hasFlight(number: 5) == true)
+
+        let removeNotification = airPort.controlTower.notifications.first
+        assert(removeNotification?.actionCode == "remove(number:)")
+
+        // indirect output
+        let spy = airPort.controlTower as? ControlTowerSpy
+        assert(spy?.numberOfReports == 2)
+        print("\(#function) success")
+    }
+
+    static func testSpyJsonViewerShowJson() {
+        // setup
+        let interactor = JsonViewer.Interactor()
+        let presenterSpy = JsonViewer.PresenterSpy()
+        interactor.presenter = presenterSpy
+
+        // exercise
+        let sampleData = """
+        {
+            "spy": true
+        }
+        """.data(using: .utf8)!
+
+        interactor.showJson(request: .init(data: sampleData))
+
+        // Verify indirect output
+        assert(presenterSpy.presentJsonIsCalled)
+        assert(presenterSpy.jsonModel?.spy ?? false == true)
+        print("\(#function) success")
+    }
+}
+
 StubTest.testSuccess()
 StubTest.testFailure()
+SpyTest.testSpyJsonViewerShowJson()
+SpyTest.testRealDOCFlight()
+SpyTest.testSpyFlight()
